@@ -435,25 +435,27 @@ static int routing_policy_rules_append_json(Set *rules, sd_json_variant **v) {
         return json_variant_set_field_non_null(v, "RoutingPolicyRules", array);
 }
 
-static int network_append_json(Network *network, sd_json_variant **v) {
+static int network_append_json(Link *link, sd_json_variant **v) {
+        LinkOperationalStateRange operstate_range;
+
         assert(v);
 
-        if (!network)
+        if (!link || !link->network)
                 return 0;
+
+        link_required_operstate_for_online(link, &operstate_range);
 
         return sd_json_variant_merge_objectbo(
                         v,
-                        SD_JSON_BUILD_PAIR_STRING("NetworkFile", network->filename),
-                        SD_JSON_BUILD_PAIR_STRV("NetworkFileDropins", network->dropins),
-                        SD_JSON_BUILD_PAIR_BOOLEAN("RequiredForOnline", network->required_for_online > 0),
-                        SD_JSON_BUILD_PAIR_CONDITION(
-                                        operational_state_range_is_valid(&network->required_operstate_for_online),
-                                        "RequiredOperationalStateForOnline",
-                                        SD_JSON_BUILD_ARRAY(
-                                                SD_JSON_BUILD_STRING(link_operstate_to_string(network->required_operstate_for_online.min)),
-                                                SD_JSON_BUILD_STRING(link_operstate_to_string(network->required_operstate_for_online.max)))),
-                        SD_JSON_BUILD_PAIR_STRING("RequiredFamilyForOnline", link_required_address_family_to_string(network->required_family_for_online)),
-                        SD_JSON_BUILD_PAIR_STRING("ActivationPolicy", activation_policy_to_string(network->activation_policy)));
+                        SD_JSON_BUILD_PAIR_STRING("NetworkFile", link->network->filename),
+                        SD_JSON_BUILD_PAIR_STRV("NetworkFileDropins", link->network->dropins),
+                        SD_JSON_BUILD_PAIR_BOOLEAN("RequiredForOnline", link->network->required_for_online > 0),
+                        SD_JSON_BUILD_PAIR("RequiredOperationalStateForOnline",
+                                           SD_JSON_BUILD_ARRAY(
+                                                   SD_JSON_BUILD_STRING(link_operstate_to_string(operstate_range.min)),
+                                                   SD_JSON_BUILD_STRING(link_operstate_to_string(operstate_range.max)))),
+                        SD_JSON_BUILD_PAIR_STRING("RequiredFamilyForOnline", link_required_address_family_to_string(link_required_family_for_online(link))),
+                        SD_JSON_BUILD_PAIR_STRING("ActivationPolicy", activation_policy_to_string(link->network->activation_policy)));
 }
 
 static int netdev_append_json(NetDev *netdev, sd_json_variant **v) {
@@ -1033,7 +1035,8 @@ static int dns_misc_append_json(Link *link, sd_json_variant **v) {
         _cleanup_(sd_json_variant_unrefp) sd_json_variant *array = NULL;
         ResolveSupport resolve_support;
         NetworkConfigSource source;
-        DnsOverTlsMode mode;
+        DnsOverTlsMode tls_mode;
+        DnssecMode dnssec_mode;
         int t, r;
 
         assert(link);
@@ -1078,13 +1081,25 @@ static int dns_misc_append_json(Link *link, sd_json_variant **v) {
                         return r;
         }
 
-        mode = link->dns_over_tls_mode >= 0 ? link->dns_over_tls_mode : link->network->dns_over_tls_mode;
-        if (mode >= 0) {
+        tls_mode = link->dns_over_tls_mode >= 0 ? link->dns_over_tls_mode : link->network->dns_over_tls_mode;
+        if (tls_mode >= 0) {
                 source = link->dns_over_tls_mode >= 0 ? NETWORK_CONFIG_SOURCE_RUNTIME : NETWORK_CONFIG_SOURCE_STATIC;
 
                 r = sd_json_variant_append_arraybo(
                                 &array,
-                                SD_JSON_BUILD_PAIR_STRING("DNSOverTLS", dns_over_tls_mode_to_string(mode)),
+                                SD_JSON_BUILD_PAIR_STRING("DNSOverTLS", dns_over_tls_mode_to_string(tls_mode)),
+                                SD_JSON_BUILD_PAIR_STRING("ConfigSource", network_config_source_to_string(source)));
+                if (r < 0)
+                        return r;
+        }
+
+        dnssec_mode = link->dnssec_mode != _DNSSEC_MODE_INVALID ? link->dnssec_mode : link->network->dnssec_mode;
+        if (dnssec_mode != _DNSSEC_MODE_INVALID) {
+                source = link->dnssec_mode != _DNSSEC_MODE_INVALID ? NETWORK_CONFIG_SOURCE_RUNTIME : NETWORK_CONFIG_SOURCE_STATIC;
+
+                r = sd_json_variant_append_arraybo(
+                                &array,
+                                SD_JSON_BUILD_PAIR_STRING("DNSSEC", dnssec_mode_to_string(dnssec_mode)),
                                 SD_JSON_BUILD_PAIR_STRING("ConfigSource", network_config_source_to_string(source)));
                 if (r < 0)
                         return r;
@@ -1555,7 +1570,7 @@ int link_build_json(Link *link, sd_json_variant **ret) {
         if (r < 0)
                 return r;
 
-        r = network_append_json(link->network, &v);
+        r = network_append_json(link, &v);
         if (r < 0)
                 return r;
 
@@ -1638,6 +1653,37 @@ int link_build_json(Link *link, sd_json_variant **ret) {
         r = lldp_tx_append_json(link, &v);
         if (r < 0)
                 return r;
+
+        /* carrier bound links */
+        if (!hashmap_isempty(link->bound_to_links)) {
+                _cleanup_(sd_json_variant_unrefp) sd_json_variant *array = NULL;
+                Link *bound;
+
+                HASHMAP_FOREACH(bound, link->bound_to_links) {
+                        r = sd_json_variant_append_arrayb(&array, SD_JSON_BUILD_UNSIGNED(bound->ifindex));
+                        if (r < 0)
+                                return r;
+                }
+
+                r = sd_json_variant_set_field(&v, "CarrierBoundTo", array);
+                if (r < 0)
+                        return r;
+        }
+
+        if (!hashmap_isempty(link->bound_by_links)) {
+                _cleanup_(sd_json_variant_unrefp) sd_json_variant *array = NULL;
+                Link *bound;
+
+                HASHMAP_FOREACH(bound, link->bound_by_links) {
+                        r = sd_json_variant_append_arrayb(&array, SD_JSON_BUILD_UNSIGNED(bound->ifindex));
+                        if (r < 0)
+                                return r;
+                }
+
+                r = sd_json_variant_set_field(&v, "CarrierBoundBy", array);
+                if (r < 0)
+                        return r;
+        }
 
         *ret = TAKE_PTR(v);
         return 0;

@@ -73,6 +73,53 @@
     and
     <citerefentry><refentrytitle>org.freedesktop.LogControl1</refentrytitle><manvolnum>5</manvolnum></citerefentry>
     for a description of the D-Bus API.</para>
+
+    <para><filename>systemd-networkd</filename> also exposes a
+    <ulink url="https://varlink.org">Varlink</ulink> API on the socket
+    <filename>/run/systemd/netif/io.systemd.Network</filename>. The
+    <interfacename>io.systemd.Network</interfacename> interface provides the following methods:</para>
+
+    <variablelist>
+      <varlistentry>
+        <term><function>io.systemd.Network.GetInterfaces</function></term>
+        <listitem><para>Returns information about network interfaces managed by
+        <filename>systemd-networkd</filename>. Accepts optional
+        <varname>InterfaceIndex</varname> (integer) and <varname>InterfaceName</varname> (string)
+        parameters to filter results to a single interface. Returns an
+        <varname>Interfaces</varname> array of objects, each containing the same state
+        information as the per-interface state files in
+        <filename>/run/systemd/netif/links/</filename>, including administrative state,
+        operational state, carrier state, address state, online state, associated
+        configuration files, DNS servers, NTP servers, search/route domains, LLMNR/mDNS
+        settings, DNSSEC mode, and carrier-bound interface relationships. This method
+        is the recommended programmatic alternative to parsing the private state files.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><function>io.systemd.Network.Describe</function></term>
+        <listitem><para>Returns comprehensive information about all managed interfaces,
+        routes, next hops, and routing policy rules.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><function>io.systemd.Network.GetStates</function></term>
+        <listitem><para>Returns the aggregated address, carrier, online, and operational
+        states across all managed interfaces.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><function>io.systemd.Network.GetNamespaceId</function></term>
+        <listitem><para>Returns the inode number and NSID of the current network
+        namespace.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><function>io.systemd.Network.GetLLDPNeighbors</function></term>
+        <listitem><para>Returns LLDP neighbor information, optionally filtered to a
+        specific interface.</para></listitem>
+      </varlistentry>
+    </variablelist>
   </refsect1>
 
   <refsect1><title>Configuration Files</title>

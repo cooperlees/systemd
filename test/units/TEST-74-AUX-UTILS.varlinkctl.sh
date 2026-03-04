@@ -209,6 +209,14 @@ varlinkctl call /run/systemd/io.systemd.Manager io.systemd.Manager.Reexecute '{}
 varlinkctl info /run/systemd/netif/io.systemd.Network
 varlinkctl introspect /run/systemd/netif/io.systemd.Network io.systemd.Network
 varlinkctl call /run/systemd/netif/io.systemd.Network io.systemd.Network.Describe '{}'
+# GetInterfaces: all interfaces
+varlinkctl call /run/systemd/netif/io.systemd.Network io.systemd.Network.GetInterfaces '{}'
+# GetInterfaces: filter by index (loopback = 1)
+varlinkctl call /run/systemd/netif/io.systemd.Network io.systemd.Network.GetInterfaces '{"InterfaceIndex": 1}'
+# GetInterfaces: filter by name
+varlinkctl call /run/systemd/netif/io.systemd.Network io.systemd.Network.GetInterfaces '{"InterfaceName": "lo"}'
+# GetInterfaces: invalid index should fail
+(! varlinkctl call /run/systemd/netif/io.systemd.Network io.systemd.Network.GetInterfaces '{"InterfaceIndex": 99999}')
 
 # test io.systemd.Unit
 varlinkctl info /run/systemd/io.systemd.Manager

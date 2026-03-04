@@ -266,6 +266,8 @@ static SD_VARLINK_DEFINE_STRUCT_TYPE(
                 SD_VARLINK_DEFINE_FIELD(DNSDefaultRoute, SD_VARLINK_BOOL, SD_VARLINK_NULLABLE),
                 SD_VARLINK_FIELD_COMMENT("DNS-over-TLS mode setting"),
                 SD_VARLINK_DEFINE_FIELD(DNSOverTLS, SD_VARLINK_STRING, SD_VARLINK_NULLABLE),
+                SD_VARLINK_FIELD_COMMENT("DNSSEC validation mode setting"),
+                SD_VARLINK_DEFINE_FIELD(DNSSEC, SD_VARLINK_STRING, SD_VARLINK_NULLABLE),
                 SD_VARLINK_FIELD_COMMENT("Configuration source for this DNS setting"),
                 SD_VARLINK_DEFINE_FIELD(ConfigSource, SD_VARLINK_STRING, 0));
 
@@ -533,7 +535,11 @@ static SD_VARLINK_DEFINE_STRUCT_TYPE(
                 SD_VARLINK_FIELD_COMMENT("DHCPv6 client configuration and lease information"),
                 SD_VARLINK_DEFINE_FIELD_BY_TYPE(DHCPv6Client, DHCPv6Client, SD_VARLINK_NULLABLE),
                 SD_VARLINK_FIELD_COMMENT("LLDP transmit configuration for this interface"),
-                SD_VARLINK_DEFINE_FIELD_BY_TYPE(LLDP, LLDPNeighbor, SD_VARLINK_NULLABLE));
+                SD_VARLINK_DEFINE_FIELD_BY_TYPE(LLDP, LLDPNeighbor, SD_VARLINK_NULLABLE),
+                SD_VARLINK_FIELD_COMMENT("Interface indices of links whose carrier state this interface is bound to"),
+                SD_VARLINK_DEFINE_FIELD(CarrierBoundTo, SD_VARLINK_INT, SD_VARLINK_ARRAY|SD_VARLINK_NULLABLE),
+                SD_VARLINK_FIELD_COMMENT("Interface indices of links whose carrier state is bound to this interface"),
+                SD_VARLINK_DEFINE_FIELD(CarrierBoundBy, SD_VARLINK_INT, SD_VARLINK_ARRAY|SD_VARLINK_NULLABLE));
 
 static SD_VARLINK_DEFINE_METHOD(
                 Describe,
@@ -593,6 +599,15 @@ static SD_VARLINK_DEFINE_METHOD(
                 SD_VARLINK_FIELD_COMMENT("Whether persistent storage is ready and writable"),
                 SD_VARLINK_DEFINE_INPUT(Ready, SD_VARLINK_BOOL, 0));
 
+static SD_VARLINK_DEFINE_METHOD(
+                GetInterfaces,
+                SD_VARLINK_FIELD_COMMENT("Filter by interface index (optional)"),
+                SD_VARLINK_DEFINE_INPUT(InterfaceIndex, SD_VARLINK_INT, SD_VARLINK_NULLABLE),
+                SD_VARLINK_FIELD_COMMENT("Filter by interface name (optional)"),
+                SD_VARLINK_DEFINE_INPUT(InterfaceName, SD_VARLINK_STRING, SD_VARLINK_NULLABLE),
+                SD_VARLINK_FIELD_COMMENT("Network interfaces managed by systemd-networkd, optionally filtered"),
+                SD_VARLINK_DEFINE_OUTPUT_BY_TYPE(Interfaces, Interface, SD_VARLINK_ARRAY));
+
 static SD_VARLINK_DEFINE_ERROR(StorageReadOnly);
 
 SD_VARLINK_DEFINE_INTERFACE(
@@ -603,6 +618,7 @@ SD_VARLINK_DEFINE_INTERFACE(
                 &vl_method_GetNamespaceId,
                 &vl_method_GetLLDPNeighbors,
                 &vl_method_SetPersistentStorage,
+                &vl_method_GetInterfaces,
                 &vl_type_Address,
                 &vl_type_DHCPLease,
                 &vl_type_DHCPServer,
