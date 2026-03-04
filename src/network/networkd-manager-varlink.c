@@ -236,6 +236,55 @@ static int vl_method_set_persistent_storage(sd_varlink *vlink, sd_json_variant *
         return sd_varlink_reply(vlink, NULL);
 }
 
+static int vl_method_get_interfaces(sd_varlink *vlink, sd_json_variant *parameters, sd_varlink_method_flags_t flags, void *userdata) {
+        _cleanup_(sd_json_variant_unrefp) sd_json_variant *array = NULL;
+        Manager *manager = ASSERT_PTR(userdata);
+        Link *link = NULL;
+        int r;
+
+        assert(vlink);
+
+        r = dispatch_link(vlink, parameters, manager, /* flags= */ 0, &link);
+        if (r != 0)
+                return r;
+
+        if (link) {
+                _cleanup_(sd_json_variant_unrefp) sd_json_variant *e = NULL;
+
+                r = link_build_json(link, &e);
+                if (r < 0)
+                        return r;
+
+                r = sd_json_variant_append_array(&array, e);
+                if (r < 0)
+                        return r;
+        } else {
+                _cleanup_free_ Link **links = NULL;
+                size_t n_links = 0;
+
+                r = hashmap_dump_sorted(manager->links_by_index, (void ***) &links, &n_links);
+                if (r < 0)
+                        return r;
+
+                FOREACH_ARRAY(l, links, n_links) {
+                        _cleanup_(sd_json_variant_unrefp) sd_json_variant *e = NULL;
+
+                        r = link_build_json(*l, &e);
+                        if (r < 0)
+                                return r;
+
+                        r = sd_json_variant_append_array(&array, e);
+                        if (r < 0)
+                                return r;
+                }
+        }
+
+        return sd_varlink_replybo(
+                        vlink,
+                        SD_JSON_BUILD_PAIR_CONDITION(sd_json_variant_is_blank_array(array), "Interfaces", SD_JSON_BUILD_EMPTY_ARRAY),
+                        SD_JSON_BUILD_PAIR_CONDITION(!sd_json_variant_is_blank_array(array), "Interfaces", SD_JSON_BUILD_VARIANT(array)));
+}
+
 int manager_varlink_init(Manager *m, int fd) {
         _cleanup_(sd_varlink_server_unrefp) sd_varlink_server *s = NULL;
         _unused_ _cleanup_close_ int fd_close = fd; /* take possession */
@@ -271,6 +320,7 @@ int manager_varlink_init(Manager *m, int fd) {
                         "io.systemd.Network.GetNamespaceId",       vl_method_get_namespace_id,
                         "io.systemd.Network.GetLLDPNeighbors",     vl_method_get_lldp_neighbors,
                         "io.systemd.Network.SetPersistentStorage", vl_method_set_persistent_storage,
+                        "io.systemd.Network.GetInterfaces",        vl_method_get_interfaces,
                         "io.systemd.Network.Link.Up",              vl_method_link_up,
                         "io.systemd.Network.Link.Down",            vl_method_link_down,
                         "io.systemd.service.Ping",                 varlink_method_ping,
