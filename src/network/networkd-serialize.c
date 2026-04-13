@@ -430,6 +430,12 @@ static int manager_deserialize_route(Manager *manager, sd_json_variant *v) {
                 if (r < 0)
                         return log_debug_errno(r, "Failed to duplicate deserialized route: %m");
 
+                /* The RouteParam struct is zero-initialized, so lifetime_usec defaults to 0.
+                 * Set it to USEC_INFINITY so that route_setup_timer() during enumeration does not
+                 * schedule an immediate expiry timer and remove the route before it is re-confirmed
+                 * by the network client (NDisc, DHCP, etc.) or static configuration. */
+                new_route->lifetime_usec = USEC_INFINITY;
+
                 r = route_attach(manager, new_route);
                 if (r == -EEXIST)
                         return 0; /* Huh?? Already pre-populated?? */
