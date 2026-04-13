@@ -75,6 +75,7 @@ int link_request_nexthop(
 int link_request_static_nexthops(Link *link, bool only_ipv4);
 
 int nexthop_get_by_id(Manager *manager, uint32_t id, NextHop **ret);
+int nexthop_add_new(Manager *manager, uint32_t id, NextHop **ret);
 int nexthop_get_request_by_id(Manager *manager, uint32_t id, Request **ret);
 int nexthop_is_ready(Manager *manager, uint32_t id, NextHop **ret);
 int manager_rtnl_process_nexthop(sd_netlink *rtnl, sd_netlink_message *message, Manager *m);

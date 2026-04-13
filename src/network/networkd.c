@@ -95,13 +95,13 @@ static int run(int argc, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Could not load configuration files: %m");
 
-        r = manager_enumerate(m);
-        if (r < 0)
-                return r;
-
         r = manager_deserialize(m);
         if (r < 0)
                 log_warning_errno(r, "Failed to deserialize the previous invocation, ignoring: %m");
+
+        r = manager_enumerate(m);
+        if (r < 0)
+                return r;
 
         r = manager_start(m);
         if (r < 0)
