@@ -283,11 +283,14 @@ static int manager_deserialize_nexthop(Manager *manager, sd_json_variant *v) {
         NextHop *nexthop;
         r = nexthop_get_by_id(manager, p.id, &nexthop);
         if (r < 0) {
-                log_debug_errno(r, "Cannot find deserialized nexthop (ID=%"PRIu32"): %m", p.id);
-                return 0; /* Already removed? */
-        }
-
-        if (nexthop->source != NETWORK_CONFIG_SOURCE_FOREIGN)
+                /* The nexthop has not been enumerated from the kernel yet. Pre-populate it from the
+                 * serialized data so that when enumeration occurs it is recognized as a known nexthop
+                 * rather than a foreign one. This is especially important when ManageForeignNextHops=no,
+                 * which causes unknown nexthops to be ignored during enumeration. */
+                r = nexthop_add_new(manager, p.id, &nexthop);
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to pre-populate deserialized nexthop (ID=%"PRIu32"): %m", p.id);
+        } else if (nexthop->source != NETWORK_CONFIG_SOURCE_FOREIGN)
                 return 0; /* Huh?? Already deserialized?? */
 
         nexthop->source = p.source;
@@ -406,6 +409,7 @@ static int manager_deserialize_route(Manager *manager, sd_json_variant *v) {
         memcpy_safe(&p.route.src, p.src.iov_base, p.src.iov_len);
         memcpy_safe(&p.route.prefsrc, p.prefsrc.iov_base, p.prefsrc.iov_len);
         memcpy_safe(&p.route.nexthop.gw, p.gw.iov_base, p.gw.iov_len);
+        memcpy_safe(&p.route.provider, p.provider.iov_base, p.provider.iov_len);
 
         p.route.metric.n_metrics = p.metrics.iov_len / sizeof(uint32_t);
         p.route.metric.metrics = new(uint32_t, p.route.metric.n_metrics);
@@ -417,15 +421,36 @@ static int manager_deserialize_route(Manager *manager, sd_json_variant *v) {
         Route *route;
         r = route_get(manager, &p.route, &route);
         if (r < 0) {
-                log_route_debug(&p.route, "Cannot find deserialized", manager);
-                return 0; /* Already removed? */
+                /* The route has not been enumerated from the kernel yet. Pre-populate it from the
+                 * serialized data so that when enumeration occurs it is recognized as a known route
+                 * rather than a foreign one. This is especially important when ManageForeignRoutes=no,
+                 * which causes unknown routes to be ignored during enumeration. */
+                _cleanup_(route_unrefp) Route *new_route = NULL;
+                r = route_dup(&p.route, NULL, &new_route);
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to duplicate deserialized route: %m");
+
+                /* The RouteParam struct is zero-initialized, so lifetime_usec defaults to 0.
+                 * Set it to USEC_INFINITY so that route_setup_timer() during enumeration does not
+                 * schedule an immediate expiry timer and remove the route before it is re-confirmed
+                 * by the network client (NDisc, DHCP, etc.) or static configuration. */
+                new_route->lifetime_usec = USEC_INFINITY;
+
+                r = route_attach(manager, new_route);
+                if (r == -EEXIST)
+                        return 0; /* Huh?? Already pre-populated?? */
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to pre-populate deserialized route: %m");
+
+                log_route_debug(TAKE_PTR(new_route), "Deserialized", manager);
+                return 0;
         }
 
         if (route->source != NETWORK_CONFIG_SOURCE_FOREIGN)
                 return 0; /* Huh?? Already deserialized?? */
 
         route->source = p.route.source;
-        memcpy_safe(&route->provider, p.provider.iov_base, p.provider.iov_len);
+        route->provider = p.route.provider;
 
         log_route_debug(route, "Deserialized", manager);
         return 0;

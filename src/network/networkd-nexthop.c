@@ -412,7 +412,7 @@ static int nexthop_get_request(Link *link, const NextHop *in, Request **ret) {
         return -ENOENT;
 }
 
-static int nexthop_add_new(Manager *manager, uint32_t id, NextHop **ret) {
+int nexthop_add_new(Manager *manager, uint32_t id, NextHop **ret) {
         _cleanup_(nexthop_unrefp) NextHop *nexthop = NULL;
         int r;
 
