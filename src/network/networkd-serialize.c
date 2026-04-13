@@ -428,7 +428,7 @@ static int manager_deserialize_route(Manager *manager, sd_json_variant *v) {
                 _cleanup_(route_unrefp) Route *new_route = NULL;
                 r = route_dup(&p.route, NULL, &new_route);
                 if (r < 0)
-                        return log_oom_debug();
+                        return log_debug_errno(r, "Failed to duplicate deserialized route: %m");
 
                 r = route_attach(manager, new_route);
                 if (r == -EEXIST)
